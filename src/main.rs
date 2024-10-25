@@ -1,217 +1,129 @@
-use rodio::buffer::SamplesBuffer;
-use rodio::{OutputStream, Sink};
-use serde::{Deserialize, Serialize};
+use serde::{Serialize, Deserialize};
+use std::f32::consts::PI;
+use rodio::{OutputStream, Source, buffer::SamplesBuffer};
 use std::fs::File;
-use std::io::{self, Read};
-
-use serde_json;
-
-const SAMPLE_RATE: f32 = 44100.0;
+use std::io::{Write, Read};
+use std::time::Duration;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 enum Instrument {
     Sine,
-    Saw,
     Square,
     Triangle,
+    Saw,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-struct NotePacket {
-    pitch: u8,
-    instrument: Instrument,
-    note_length: f32,
-    delay: f32,
-    velocity: u8,
+enum NoteStatus {
+    On,
+    Off,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-struct Song {
-    bpm: u32,
-    packets: Vec<NotePacket>,
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct MidiPacket {
+    pitch: u8,           // MIDI pitch (0-127)
+    instrument: Instrument, 
+    note_status: NoteStatus, 
+    delta: f32,          // Time duration in beats
+    velocity: f32,       // Volume (0.0 - 1.0)
 }
 
-impl Song {
-    pub fn new(bpm: u32) -> Self {
-        Self {
-            bpm,
-            packets: Vec::new(),
-        }
-    }
+// Function to generate a basic waveform
+fn generate_waveform(packet: &MidiPacket, sample_rate: u32, duration: f32) -> Vec<f32> {
+    let mut samples = Vec::new();
+    let frequency = 440.0 * 2.0f32.powf((packet.pitch as f32 - 69.0) / 12.0);
+    let amplitude = packet.velocity;
 
-    pub fn add_note(&mut self, packet: NotePacket) {
-        self.packets.push(packet);
-    }
-
-    pub fn save_to_file(&self, filename: &str) -> io::Result<()> {
-        let file = File::create(filename)?;
-        serde_json::to_writer(file, self)?;
-        Ok(())
-    }
-
-    pub fn load_from_file(filename: &str) -> io::Result<Self> {
-        let mut file = File::open(filename)?;
-        let mut contents = String::new();
-        file.read_to_string(&mut contents)?;
-        let song: Song = serde_json::from_str(&contents)?;
-        Ok(song)
-    }
-}
-
-fn midi_to_frequency(midi_note: u8) -> f32 {
-    440.0 * 2.0_f32.powf((midi_note as f32 - 69.0) / 12.0)
-}
-
-fn generate_wave(packet: &NotePacket, bpm: u32) -> Vec<f32> {
-    let frequency = midi_to_frequency(packet.pitch);
-    let duration_in_seconds = (60.0 / bpm as f32) * packet.note_length;
-    let num_samples = (duration_in_seconds * SAMPLE_RATE) as usize;
-    let mut waveform = Vec::new();
-
-    for i in 0..num_samples {
-        let t = i as f32 / SAMPLE_RATE;
+    for t in 0..(sample_rate as f32 * duration) as usize {
         let sample = match packet.instrument {
-            Instrument::Sine => (2.0 * std::f32::consts::PI * frequency * t).sin(),
-            Instrument::Saw => 2.0 * (t * frequency - (t * frequency).floor()) - 1.0,
-            Instrument::Square => {
-                if (t * frequency).sin() > 0.0 {
-                    1.0
-                } else {
-                    -1.0
-                }
-            }
-            Instrument::Triangle => 2.0 * (2.0 * (t * frequency - 0.5).abs() - 1.0).abs() - 1.0,
-        } * (packet.velocity as f32 / 127.0);
-
-        waveform.push(sample);
+            Instrument::Sine => (2.0 * PI * frequency * t as f32 / sample_rate as f32).sin(),
+            Instrument::Square => if (2.0 * PI * frequency * t as f32 / sample_rate as f32).sin() > 0.0 { 1.0 } else { -1.0 },
+            Instrument::Triangle => (2.0 * PI * frequency * t as f32 / sample_rate as f32).asin(),
+            Instrument::Saw => 2.0 * ((frequency * t as f32 / sample_rate as f32) % 1.0) - 1.0,
+        } * amplitude;
+        samples.push(sample);
     }
 
-    waveform
+    samples
 }
 
-// New function to mix multiple waveforms together, supporting polyphony.
-fn mix_waveforms(waveforms: Vec<Vec<f32>>) -> Vec<f32> {
-    let max_length = waveforms.iter().map(|w| w.len()).max().unwrap_or(0);
-    let mut mixed = vec![0.0; max_length];
+// Function to mix multiple waveforms for polyphony
+fn mix_waveforms(packets: &[MidiPacket], bpm: f32, sample_rate: u32) -> Vec<f32> {
+    let mut mixed_waveform = Vec::new();
+    let seconds_per_beat = 60.0 / bpm;
 
-    for wave in waveforms {
-        for (i, sample) in wave.iter().enumerate() {
-            if i < mixed.len() {
-                mixed[i] += sample;
-            }
+    for packet in packets {
+        let duration = packet.delta * seconds_per_beat;
+        let waveform = generate_waveform(packet, sample_rate, duration);
+        
+        // Resize the mixed_waveform vector if necessary
+        if mixed_waveform.len() < waveform.len() {
+            mixed_waveform.resize(waveform.len(), 0.0);
+        }
+
+        // Add the waveform to the mix (polyphony)
+        for (i, sample) in waveform.iter().enumerate() {
+            mixed_waveform[i] += sample;
         }
     }
 
-    // Normalize the mixed waveform to avoid clipping
-    let max_sample = mixed.iter().cloned().fold(0.0_f32, f32::max);
-    if max_sample > 1.0 {
-        for sample in &mut mixed {
-            *sample /= max_sample;
-        }
+    // Normalize the waveform
+    let max_amplitude = mixed_waveform.iter().copied().fold(0.0_f32, f32::max).max(1.0);
+    for sample in &mut mixed_waveform {
+        *sample /= max_amplitude;
     }
 
-    mixed
+    mixed_waveform
 }
 
-// Updated function to generate a polyphonic song waveform
-fn generate_song_waveform(song: &Song) -> Vec<f32> {
-    let mut active_notes: Vec<(Vec<f32>, usize)> = Vec::new(); // (waveform, samples left)
-    let mut song_waveform = Vec::new();
-    let delay_samples =
-        |delay: f32, bpm: u32| -> usize { ((60.0 / bpm as f32) * delay * SAMPLE_RATE) as usize };
-
-    let mut current_time = 0;
-
-    for packet in &song.packets {
-        let start_samples = delay_samples(packet.delay, song.bpm);
-        if start_samples > current_time {
-            // Extend the buffer up to the start time of the new note
-            let silence_duration = start_samples - current_time;
-            song_waveform.extend(std::iter::repeat(0.0).take(silence_duration));
-            current_time = start_samples;
-        }
-
-        // Add the new note
-        let wave = generate_wave(packet, song.bpm);
-        let wave_len = wave.len();
-        active_notes.push((wave, wave_len));
-
-        // Mix active notes and add to the song waveform
-        let mixed_wave = mix_waveforms(active_notes.iter().map(|(w, _)| w.clone()).collect());
-        let mixed_wave_len = mixed_wave.len();
-
-        song_waveform.extend(mixed_wave);
-        // Reduce the duration of active notes
-        active_notes = active_notes
-            .into_iter()
-            .map(|(w, samples)| (w, samples.saturating_sub(mixed_wave_len)))
-            .filter(|(_, samples)| *samples > 0)
-            .collect();
-
-        current_time += mixed_wave_len;
-    }
-
-    song_waveform
-}
-
-fn play_waveform(waveform: Vec<f32>) {
+// Function to play the waveform
+fn play_waveform(waveform: Vec<f32>, sample_rate: u32) {
     let (_stream, stream_handle) = OutputStream::try_default().unwrap();
-    let sink = Sink::try_new(&stream_handle).unwrap();
+    let source = SamplesBuffer::new(1, sample_rate, waveform);
+    stream_handle.play_raw(source.convert_samples()).unwrap();
+    
+    // Keep the program running to allow the sound to play
+    std::thread::sleep(Duration::from_secs(5));
+}
 
-    // Convert the f32 samples to i16
-    let samples: Vec<i16> = waveform
-        .iter()
-        .map(|&x| (x * i16::MAX as f32) as i16)
-        .collect();
+// Save packets to a JSON file
+fn save_to_json(packets: &[MidiPacket], filename: &str) {
+    let json = serde_json::to_string(packets).unwrap();
+    let mut file = File::create(filename).unwrap();
+    file.write_all(json.as_bytes()).unwrap();
+}
 
-    // Directly create a SamplesBuffer source with the samples
-    let source = SamplesBuffer::new(1, SAMPLE_RATE as u32, samples);
-
-    // Append the source to the sink and play
-    sink.append(source);
-    sink.sleep_until_end();
+// Load packets from a JSON file
+fn load_from_json(filename: &str) -> Vec<MidiPacket> {
+    let mut file = File::open(filename).unwrap();
+    let mut json = String::new();
+    file.read_to_string(&mut json).unwrap();
+    serde_json::from_str(&json).unwrap()
 }
 
 fn main() {
-    let mut song = Song::new(60);
+    let packets = vec![
+        MidiPacket { pitch: 60, instrument: Instrument::Square, note_status: NoteStatus::On, delta: 0.0, velocity: 0.4 },
+        //MidiPacket { pitch: 64, instrument: Instrument::Sine, note_status: NoteStatus::On, delta: 0.0, velocity: 0.4 },
+        MidiPacket { pitch: 80, instrument: Instrument::Square, note_status: NoteStatus::On, delta: 10.0, velocity: 0.4 },
+        MidiPacket { pitch: 40, instrument: Instrument::Square, note_status: NoteStatus::On, delta: 10.0, velocity: 0.4 },
+        //MidiPacket { pitch: 72, instrument: Instrument::Sine, note_status: NoteStatus::On, delta: 0.0, velocity: 0.4 },
+        MidiPacket { pitch: 60, instrument: Instrument::Square, note_status: NoteStatus::Off, delta: 2.0, velocity: 0.4 },
+        //MidiPacket { pitch: 64, instrument: Instrument::Sine, note_status: NoteStatus::Off, delta: 0.0, velocity: 0.4 },
+        MidiPacket { pitch: 80, instrument: Instrument::Square, note_status: NoteStatus::Off, delta: 10.0, velocity: 0.4 },
+        MidiPacket { pitch: 40, instrument: Instrument::Square, note_status: NoteStatus::Off, delta: 0.0, velocity: 0.4 },
+        //MidiPacket { pitch: 72, instrument: Instrument::Sine, note_status: NoteStatus::Off, delta: 0.0, velocity: 0.4 },
+    ];
 
-    // Example of adding notes with overlapping timings for polyphony
-    song.add_note(NotePacket {
-        pitch: 60,
-        instrument: Instrument::Sine,
-        note_length: 4.0,
-        delay: 0.0,
-        velocity: 255,
-    });
+    // Save to JSON
+    save_to_json(&packets, "song.json");
 
-    song.add_note(NotePacket {
-        pitch: 64,
-        instrument: Instrument::Sine,
-        note_length: 4.0,
-        delay: 0.0,
-        velocity: 255,
-    });
+    // Load from JSON
+    let loaded_packets = load_from_json("song.json");
 
-    song.add_note(NotePacket {
-        pitch: 67,
-        instrument: Instrument::Sine,
-        note_length: 4.0,
-        delay: 0.0,
-        velocity: 255,
-    });
-
-    song.add_note(NotePacket {
-        pitch: 72,
-        instrument: Instrument::Sine,
-        note_length: 4.0,
-        delay: 0.0,
-        velocity: 255,
-    });
-
-    song.save_to_file("polyphonic_song.json").unwrap();
-
-    let loaded_song = Song::load_from_file("polyphonic_song.json").unwrap();
-    let waveform = generate_song_waveform(&loaded_song);
-
-    play_waveform(waveform);
+    // Generate waveform and play
+    let bpm = 60.0;
+    let sample_rate = 44100;
+    let waveform = mix_waveforms(&loaded_packets, bpm, sample_rate);
+    play_waveform(waveform, sample_rate);
 }
