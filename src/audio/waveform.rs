@@ -10,12 +10,35 @@ pub fn generate_waveform(packet: &MidiPacket, sample_amount: usize, sample_rate:
     let amplitude = packet.velocity;
 
     for t in 0..sample_amount {
+        let time = t as f32 / sample_rate as f32;
+
         let sample = match packet.instrument {
-            Instrument::Sine => (2.0 * PI * frequency * t as f32 / sample_rate as f32).sin(),
-            Instrument::Square => if (2.0 * PI * frequency * t as f32 / sample_rate as f32).sin() > 0.0 { 1.0 } else { -1.0 },
-            Instrument::Triangle => (2.0 * PI * frequency * t as f32 / sample_rate as f32).asin(),
-            Instrument::Saw => 2.0 * ((frequency * t as f32 / sample_rate as f32) % 1.0) - 1.0,
+            Instrument::Sine => (2.0 * PI * frequency * time).sin(),
+            Instrument::Square => if (2.0 * PI * frequency * time).sin() > 0.0 { 1.0 } else { -1.0 },
+            Instrument::Triangle => (2.0 * PI * frequency * time).asin(),
+            Instrument::Saw => 2.0 * ((frequency * time) % 1.0) - 1.0,
+            Instrument::Piano => {  
+                // Piano funciton by Inigo Quilez: https://www.youtube.com/watch?v=ogFAHvYatWs
+                let decay_constant = -0.0015 * 2.0 * PI * frequency;
+
+                // Base sine wave with exponential decay
+                let mut piano_note = (2.0 * PI * frequency * time).sin() * (decay_constant * time).exp();
+
+                // Add overtones with progressively halved amplitude
+                piano_note += (2.0 * 2.0 * PI * frequency * time).sin() * (decay_constant * time).exp() / 2.0;
+                piano_note += (3.0 * 2.0 * PI * frequency * time).sin() * (decay_constant * time).exp() / 4.0;
+                piano_note += (4.0 * 2.0 * PI * frequency * time).sin() * (decay_constant * time).exp() / 8.0;
+                piano_note += (5.0 * 2.0 * PI * frequency * time).sin() * (decay_constant * time).exp() / 16.0;
+                piano_note += (6.0 * 2.0 * PI * frequency * time).sin() * (decay_constant * time).exp() / 32.0;
+
+                // Apply saturation by adding cubic term for richness
+                piano_note += piano_note * piano_note * piano_note;
+
+                // Final envelope modulation for dynamic decay
+                piano_note * (1.0 + 16.0 * time * (-6.0 * time).exp())
+            },
         } * amplitude;
+
         samples.push(sample);
     }
 

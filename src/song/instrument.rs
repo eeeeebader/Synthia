@@ -6,4 +6,5 @@ pub enum Instrument {
     Square,
     Triangle,
     Saw,
+    Piano,
 }

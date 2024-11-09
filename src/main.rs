@@ -8,11 +8,14 @@ use utils::save_vec_to_csv;
 use song::load_from_json;
 
 fn main() {
-    let loaded_song = load_from_json("sweet_dreams.json");
+    let filename_in: &str = "piano_tone.json";
+    let filename_out: &str = &(format!("{}.csv", filename_in.split('.').next().unwrap()));
+
+    let loaded_song = load_from_json(filename_in);
 
     let sample_rate = 44100;
     let (song_duration_secs, waveform) = generate_wave_from_packets(&loaded_song.packets, loaded_song.bpm, sample_rate);
 
-    save_vec_to_csv(waveform.clone(), "sweet_dreams.csv").unwrap();
+    save_vec_to_csv(waveform.clone(), filename_out).unwrap();
     play_waveform(waveform, sample_rate, song_duration_secs);
 }
