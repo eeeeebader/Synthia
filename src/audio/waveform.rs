@@ -84,14 +84,19 @@ pub fn generate_waveform(packet: &MidiPacket, sample_amount: usize, sample_rate:
     let amplitude = packet.velocity;
 
 
-    let sample_amount_temp = (sample_amount as f32 * 1.5) as u32;
+    let mut sample_amount_adjusted = sample_amount as u32;
 
-    // if instrument is  a piano, we at least need to generate 4 seconds of audio
-    if  packet.instrument == Instrument::Piano {
-        let sample_amount_temp = sample_rate * 4;
+    // easy reverb effect for saw wave
+    if  packet.instrument == Instrument::Saw {
+        sample_amount_adjusted = (sample_amount as f32 * 1.5) as u32;
     }
 
-    for t in 0..sample_amount_temp {
+    // no abrupt end for piano
+    if  packet.instrument == Instrument::Piano {
+        sample_amount_adjusted = sample_rate * 4;
+    }
+
+    for t in 0..sample_amount_adjusted {
         let time = t as f32 / sample_rate as f32;
 
         let sample = match packet.instrument {
