@@ -3,6 +3,80 @@ use crate::song::Instrument;
 use crate::song::NoteStatus;
 
 use std::f32::consts::PI;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
+use std::sync::Once;
+
+
+
+static mut PROMINENT_FREQUENCIES: Option<Vec<(f32, f32)>> = None;
+static INIT: Once = Once::new();
+
+// Load and preprocess the prominent frequencies only once
+fn load_prominent_frequencies() {
+    // Read the CSV file
+    let file = File::open("piano_overtones.csv").expect("Could not open file.");
+    let reader = BufReader::new(file);
+
+    let mut frequencies = Vec::new();
+
+    // Skip the header row
+    for (i, line) in reader.lines().enumerate() {
+        if i == 0 { continue; }
+
+        let line = line.expect("Could not read line.");
+        let parts: Vec<&str> = line.split(',').collect();
+        let frequency: f32 = parts[0].parse().expect("Could not parse frequency.");
+        let amplitude: f32 = parts[1].parse().expect("Could not parse amplitude.");
+
+        // Store relative frequency (as a multiplier of the base frequency) and amplitude
+        frequencies.push((frequency, amplitude));
+    }
+
+    // Store the preloaded data in a global static variable
+    unsafe {
+        PROMINENT_FREQUENCIES = Some(frequencies);
+    }
+}
+
+// Generate the piano sample by dynamically scaling the relative frequencies
+fn generate_piano_sample(base_frequency: f32, time: f32) -> f32 {
+    let base_decay_rate = -0.00015;          // Negative base decay rate
+    let decay_threshold = 0.0005;    // Threshold below which we stop adding a frequency component
+
+    // Ensure prominent frequencies are loaded only once
+    INIT.call_once(|| {
+        load_prominent_frequencies();
+    });
+
+    // Retrieve the preloaded prominent frequencies
+    let prominent_frequencies = unsafe {
+        PROMINENT_FREQUENCIES.as_ref().expect("Frequency data not loaded.")
+    };
+
+    let mut piano_note = 0.0;
+
+    // Scale time to simulate a more noticeable decay effect
+    let scaled_time = time * 50.0;  // Adjust this factor as needed
+
+    for &(relative_freq, amp) in prominent_frequencies.iter() {
+        let freq = relative_freq * base_frequency;
+
+        // Adjust decay rate: base rate plus additional decay for higher frequencies
+        // Calculate the decayed amplitude
+        let decayed_amplitude = (base_decay_rate * freq * scaled_time).exp();
+
+        // Skip this frequency if its contribution is below the threshold
+        if decayed_amplitude.abs() < decay_threshold {
+            break;
+        }
+
+        // Add the sine wave with the decayed amplitude to the overall piano note
+        piano_note += amp * decayed_amplitude * (2.0 * PI * freq * time).sin();
+    }
+
+    piano_note  // Return the accumulated sample
+}
 
 pub fn generate_waveform(packet: &MidiPacket, sample_amount: usize, sample_rate: u32) -> Vec<f32> {
     let mut samples = Vec::new();
@@ -17,27 +91,25 @@ pub fn generate_waveform(packet: &MidiPacket, sample_amount: usize, sample_rate:
             Instrument::Square => if (2.0 * PI * frequency * time).sin() > 0.0 { 1.0 } else { -1.0 },
             Instrument::Triangle => (2.0 * PI * frequency * time).asin(),
             Instrument::Saw => 2.0 * ((frequency * time) % 1.0) - 1.0,
-            Instrument::Piano => {  
-                // Piano funciton by Inigo Quilez: https://www.youtube.com/watch?v=ogFAHvYatWs
-                let decay_constant = -0.0015 * 2.0 * PI * frequency;
+            Instrument::Xylophone => {
+                let decay_constant = -0.001 * 2.0 * PI * frequency;
 
                 // Base sine wave with exponential decay
                 let mut piano_note = (2.0 * PI * frequency * time).sin() * (decay_constant * time).exp();
+                piano_note += (2.0 * PI * frequency * time).sin() * (decay_constant * time).exp();
+                piano_note += (2.0 * PI * (frequency + 2.0) * time).sin() * (decay_constant * time).exp();
 
-                // Add overtones with progressively halved amplitude
-                piano_note += (2.0 * 2.0 * PI * frequency * time).sin() * (decay_constant * time).exp() / 2.0;
-                piano_note += (3.0 * 2.0 * PI * frequency * time).sin() * (decay_constant * time).exp() / 4.0;
-                piano_note += (4.0 * 2.0 * PI * frequency * time).sin() * (decay_constant * time).exp() / 8.0;
-                piano_note += (5.0 * 2.0 * PI * frequency * time).sin() * (decay_constant * time).exp() / 16.0;
-                piano_note += (6.0 * 2.0 * PI * frequency * time).sin() * (decay_constant * time).exp() / 32.0;
+                piano_note /= 3.0;
 
-                // Apply saturation by adding cubic term for richness
-                piano_note += piano_note * piano_note * piano_note;
+                piano_note
 
-                // Final envelope modulation for dynamic decay
-                piano_note * (1.0 + 16.0 * time * (-6.0 * time).exp())
             },
+            Instrument::Piano => generate_piano_sample(frequency, time),
         } * amplitude;
+
+        if t > 1000 && sample == 0.0 {
+            break;
+        }
 
         samples.push(sample);
     }

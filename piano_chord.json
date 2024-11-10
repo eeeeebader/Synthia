@@ -14,21 +14,21 @@
             "pitch": 64,
             "instrument": "Piano",
             "note_status": "On",
-            "note_delta": 0.0,
+            "note_delta": 1.0,
             "velocity": 1.0
         },
         {
             "pitch": 67,
             "instrument": "Piano",
             "note_status": "On",
-            "note_delta": 0.0,
+            "note_delta": 1.0,
             "velocity": 1.0
         },
         {
             "pitch": 72,
             "instrument": "Piano",
             "note_status": "On",
-            "note_delta": 0.0,
+            "note_delta": 1.0,
             "velocity": 1.0
         },
         {
@@ -36,6 +36,62 @@
             "instrument": "Piano",
             "note_status": "Off",
             "note_delta": 4.0,
+            "velocity": 1.0
+        },
+        {
+            "pitch": 64,
+            "instrument": "Piano",
+            "note_status": "Off",
+            "note_delta": 0.0,
+            "velocity": 1.0
+        },
+        {
+            "pitch": 67,
+            "instrument": "Piano",
+            "note_status": "Off",
+            "note_delta": 0.0,
+            "velocity": 1.0
+        },
+        {
+            "pitch": 72,
+            "instrument": "Piano",
+            "note_status": "Off",
+            "note_delta": 0.0,
+            "velocity": 1.0
+        },
+        {
+            "pitch": 60,
+            "instrument": "Piano",
+            "note_status": "On",
+            "note_delta": 1.0,
+            "velocity": 1.0
+        },
+        {
+            "pitch": 64,
+            "instrument": "Piano",
+            "note_status": "On",
+            "note_delta": 0.1,
+            "velocity": 1.0
+        },
+        {
+            "pitch": 67,
+            "instrument": "Piano",
+            "note_status": "On",
+            "note_delta": 0.1,
+            "velocity": 1.0
+        },
+        {
+            "pitch": 72,
+            "instrument": "Piano",
+            "note_status": "On",
+            "note_delta": 0.1,
+            "velocity": 1.0
+        },
+        {
+            "pitch": 60,
+            "instrument": "Piano",
+            "note_status": "Off",
+            "note_delta": 3.0,
             "velocity": 1.0
         },
         {

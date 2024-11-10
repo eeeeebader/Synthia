@@ -1,20 +1,20 @@
 {
     "songname": "Sweet Dreams",
     "artist": "Eurythmics",
-    "bpm": 125.0,
+    "bpm": 60.0,
     "packets": [
         {
-            "pitch": 60,
+            "pitch": 72,
             "instrument": "Piano",
             "note_status": "On",
             "note_delta": 0.0,
             "velocity": 1.0
         },
         {
-            "pitch": 60,
+            "pitch": 72,
             "instrument": "Piano",
             "note_status": "Off",
-            "note_delta": 4.0,
+            "note_delta": 10.0,
             "velocity": 1.0
         }
     ]
