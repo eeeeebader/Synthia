@@ -83,7 +83,7 @@ pub fn generate_waveform(packet: &MidiPacket, sample_amount: usize, sample_rate:
     let frequency = 440.0 * 2.0f32.powf((packet.pitch as f32 - 69.0) / 12.0);
     let amplitude = packet.velocity;
 
-    
+
     let sample_amount_temp = (sample_amount as f32 * 1.5) as u32;
 
     for t in 0..sample_amount_temp {
@@ -94,19 +94,6 @@ pub fn generate_waveform(packet: &MidiPacket, sample_amount: usize, sample_rate:
             Instrument::Square => if (2.0 * PI * frequency * time).sin() > 0.0 { 1.0 } else { -1.0 },
             Instrument::Triangle => (2.0 * PI * frequency * time).asin(),
             Instrument::Saw => 2.0 * ((frequency * time) % 1.0) - 1.0,
-            Instrument::Xylophone => {
-                let decay_constant = -0.001 * 2.0 * PI * frequency;
-
-                // Base sine wave with exponential decay
-                let mut piano_note = (2.0 * PI * frequency * time).sin() * (decay_constant * time).exp();
-                piano_note += (2.0 * PI * frequency * time).sin() * (decay_constant * time).exp();
-                piano_note += (2.0 * PI * (frequency + 2.0) * time).sin() * (decay_constant * time).exp();
-
-                piano_note /= 3.0;
-
-                piano_note
-
-            },
             Instrument::Piano => generate_piano_sample(frequency, time),
         } * amplitude;
 

@@ -7,5 +7,4 @@ pub enum Instrument {
     Triangle,
     Saw,
     Piano,
-    Xylophone,
 }
