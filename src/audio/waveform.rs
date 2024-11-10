@@ -83,7 +83,9 @@ pub fn generate_waveform(packet: &MidiPacket, sample_amount: usize, sample_rate:
     let frequency = 440.0 * 2.0f32.powf((packet.pitch as f32 - 69.0) / 12.0);
     let amplitude = packet.velocity;
 
-    for t in 0..sample_amount {
+    let sample_amount_temp = (sample_amount as f32 * 1.5) as u32;
+
+    for t in 0..sample_amount_temp {
         let time = t as f32 / sample_rate as f32;
 
         let sample = match packet.instrument {

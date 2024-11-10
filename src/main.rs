@@ -8,7 +8,7 @@ use utils::save_vec_to_csv;
 use song::load_from_json;
 
 fn main() {
-    let filename_in: &str = "piano_chord.json";
+    let filename_in: &str = "fly_me_to_the_moon.json";
     let filename_out: &str = &(format!("{}.csv", filename_in.split('.').next().unwrap()));
 
     let loaded_song = load_from_json(filename_in);
