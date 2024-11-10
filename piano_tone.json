@@ -14,7 +14,7 @@
             "pitch": 72,
             "instrument": "Piano",
             "note_status": "Off",
-            "note_delta": 10.0,
+            "note_delta": 4.0,
             "velocity": 1.0
         }
     ]

@@ -1,7 +1,7 @@
 {
     "songname": "Sweet Dreams",
     "artist": "Eurythmics",
-    "bpm": 125.0,
+    "bpm": 60.0,
     "packets": [
         {
             "pitch": 60,

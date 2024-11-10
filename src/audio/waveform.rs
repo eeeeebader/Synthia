@@ -57,17 +57,17 @@ fn generate_piano_sample(base_frequency: f32, time: f32) -> f32 {
     let mut piano_note = 0.0;
 
     // Scale time to simulate a more noticeable decay effect
-    let scaled_time = time * 50.0;  // Adjust this factor as needed
+    let scaled_time = time * 1.0;  // Adjust this factor as needed
 
     for &(relative_freq, amp) in prominent_frequencies.iter() {
         let freq = relative_freq * base_frequency;
 
         // Adjust decay rate: base rate plus additional decay for higher frequencies
         // Calculate the decayed amplitude
-        let decayed_amplitude = (base_decay_rate * freq * scaled_time).exp();
+        let decayed_amplitude = (2.0 * PI * base_decay_rate * freq * (scaled_time * scaled_time)).exp();
 
         // Skip this frequency if its contribution is below the threshold
-        if decayed_amplitude.abs() < decay_threshold {
+        if decayed_amplitude.abs() < decay_threshold && false{
             break;
         }
 
@@ -85,6 +85,11 @@ pub fn generate_waveform(packet: &MidiPacket, sample_amount: usize, sample_rate:
 
 
     let sample_amount_temp = (sample_amount as f32 * 1.5) as u32;
+
+    // if instrument is  a piano, we at least need to generate 4 seconds of audio
+    if  packet.instrument == Instrument::Piano {
+        let sample_amount_temp = sample_rate * 4;
+    }
 
     for t in 0..sample_amount_temp {
         let time = t as f32 / sample_rate as f32;
